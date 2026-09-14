@@ -22,6 +22,8 @@ def load_env():
 load_env()
 CLIENT_ID = os.environ["DISCORD_CLIENT_ID"]
 SOURCE_APP = "ru.yandex.desktop.music"
+RESEND_INTERVAL = 15
+PAUSE_TIMEOUT = 300
 
 SMTC_SCRIPT = r"""
 [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false
@@ -121,10 +123,8 @@ def find_track(artist, title):
     if not results:
         return None
     track = results[0]
-    album_id = track["albums"][0]["id"] if track.get("albums") else None
     return {
         "cover": "https://" + track["coverUri"].replace("%%", "400x400") if track.get("coverUri") else None,
-        "url": f"https://music.yandex.ru/album/{album_id}/track/{track['id']}" if album_id else None,
     }
 
 
@@ -140,23 +140,29 @@ def build_activity(state, track):
         activity["timestamps"] = {"start": int(start * 1000), "end": int((start + state["dur"]) * 1000)}
     if track and track["cover"]:
         activity["assets"] = {"large_image": track["cover"], "large_text": title[:128]}
-    if track and track["url"]:
-        activity["buttons"] = [{"label": "Слушать в Яндекс Музыке", "url": track["url"]}]
     return activity
 
 
 def main():
     discord = Discord()
     tracks = {}
-    last_sig, last_start = None, 0.0
+    last_sig, last_start, last_sent = None, 0.0, 0.0
+    paused_since = None
     while True:
         for state in media_states():
             if state and not state["title"]:
                 state = None
+            if state and not state["playing"]:
+                paused_since = paused_since or time.time()
+                if time.time() - paused_since > PAUSE_TIMEOUT:
+                    state = None
+            else:
+                paused_since = None
             sig = (state["artist"], state["title"], state["playing"]) if state else None
             start = time.time() - state["pos"] if state else 0.0
             seeked = state and state["playing"] and abs(start - last_start) > 3
-            if sig == last_sig and not seeked:
+            changed = sig != last_sig
+            if not changed and not seeked and time.time() - last_sent < RESEND_INTERVAL:
                 continue
             activity = None
             if state:
@@ -169,7 +175,9 @@ def main():
             except OSError as e:
                 print("discord unavailable:", e)
                 continue
-            last_sig, last_start = sig, start
+            last_sig, last_start, last_sent = sig, start, time.time()
+            if not changed:
+                continue
             print(f"{'▶' if state and state['playing'] else '⏸'} {state['artist']} — {state['title']}" if state else "■ nothing playing")
         time.sleep(2)
 
