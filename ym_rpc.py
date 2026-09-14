@@ -52,7 +52,9 @@ def media_states():
     encoded = base64.b64encode(script.encode("utf-16-le")).decode()
     proc = subprocess.Popen(
         ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
         encoding="utf-8",
         errors="replace",
         creationflags=subprocess.CREATE_NO_WINDOW,
