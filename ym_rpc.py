@@ -139,7 +139,7 @@ def build_activity(state, track):
         start = time.time() - state["pos"]
         activity["timestamps"] = {"start": int(start * 1000), "end": int((start + state["dur"]) * 1000)}
     if track and track["cover"]:
-        activity["assets"] = {"large_image": track["cover"], "large_text": title[:128]}
+        activity["assets"] = {"large_image": track["cover"]}
     return activity
 
 
